@@ -124,7 +124,7 @@ void loop() {
         digitalWrite(RELAY_PIN, HIGH);   // Matikan relay (kipas OFF)
         digitalWrite(BUZZER_PIN, LOW);   // Matikan buzzer
     } else {
-        lcd.print("Tdk Nyaman");
+        lcd.print("Tdk Nymn");
         digitalWrite(RELAY_PIN, LOW);    // Nyalakan relay (kipas ON)
 
         // **Buzzer ON/OFF setiap 1 detik (seperti contoh awal)**
@@ -139,7 +139,7 @@ void loop() {
     Serial.print("Suhu: "); Serial.print(t);
     Serial.print(" C, Kelembaban: "); Serial.print(h);
     Serial.print(" %, Status: ");
-    Serial.println(kondisi < 50 ? "Nyaman" : "Tidak Nyaman");
+    Serial.println(kondisi < 50 ? "Nyaman" : "Tidak Nymn");
 
     delay(500); // Delay pendek agar program tetap responsif
 }
