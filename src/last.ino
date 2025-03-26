@@ -1,9 +1,20 @@
+// **Konfigurasi WiFi & Blynk**
+#define BLYNK_TEMPLATE_ID "TMPL6lwbd1Gcv"
+#define BLYNK_TEMPLATE_NAME "temperature and humidity sensor alba farrel"
+#define BLYNK_AUTH_TOKEN "r3dX1_WFslJaVydLiGvLdc73D8I291lK"
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <DHT.h>
 #include <Fuzzy.h>
 
-// **Konfigurasi LCD I2C untuk ESP32**
+
+
+char ssid[] = "Wokwi-GUEST";  
+char pass[] = "";  
+
+// **Konfigurasi LCD I2C**
 #define SDA_PIN 21
 #define SCL_PIN 22
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -18,15 +29,19 @@ float h, t;
 #define RELAY_PIN 13
 #define BUZZER_PIN 4
 
-// **Inisialisasi Fuzzy Logic**
+// **Fuzzy Logic**
 Fuzzy *fuzzy = new Fuzzy();
 
 // **Variabel untuk Buzzer**
 unsigned long lastBuzzTime = 0;
 bool buzzerState = false;
 
+// **Blynk Virtual Pins**
+#define VIRTUAL_PIN_TEMP V0
+#define VIRTUAL_PIN_HUMI V1
+#define VIRTUAL_PIN_STATUS V2
+
 void setupFuzzy() {
-    // **Input: Suhu**
     FuzzySet *dingin = new FuzzySet(0, 0, 20, 25);
     FuzzySet *normal = new FuzzySet(20, 25, 30, 35);
     FuzzySet *panas = new FuzzySet(30, 35, 50, 50);
@@ -36,7 +51,6 @@ void setupFuzzy() {
     suhu->addFuzzySet(panas);
     fuzzy->addFuzzyInput(suhu);
 
-    // **Input: Kelembaban**
     FuzzySet *kering = new FuzzySet(0, 0, 40, 50);
     FuzzySet *normalK = new FuzzySet(40, 50, 60, 70);
     FuzzySet *lembab = new FuzzySet(60, 70, 100, 100);
@@ -46,7 +60,6 @@ void setupFuzzy() {
     kelembaban->addFuzzySet(lembab);
     fuzzy->addFuzzyInput(kelembaban);
 
-    // **Output: Kondisi**
     FuzzySet *nyaman = new FuzzySet(0, 0, 50, 60);
     FuzzySet *tidakNyaman = new FuzzySet(50, 60, 100, 100);
     FuzzyOutput *kondisi = new FuzzyOutput(3);
@@ -54,7 +67,6 @@ void setupFuzzy() {
     kondisi->addFuzzySet(tidakNyaman);
     fuzzy->addFuzzyOutput(kondisi);
 
-    // **Aturan fuzzy**
     FuzzyRuleAntecedent *rule1 = new FuzzyRuleAntecedent();
     rule1->joinWithAND(dingin, kering);
     FuzzyRuleConsequent *then1 = new FuzzyRuleConsequent();
@@ -70,29 +82,28 @@ void setupFuzzy() {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("Hello Buzz!");
-
-    // **Inisialisasi I2C LCD**
     Wire.begin(SDA_PIN, SCL_PIN);
     lcd.init();
     lcd.backlight();
-    
-    // **Konfigurasi Pin**
+
     pinMode(RELAY_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
-    digitalWrite(RELAY_PIN, HIGH);  // Matikan relay awalnya
-    digitalWrite(BUZZER_PIN, LOW);  // Matikan buzzer awalnya
+    digitalWrite(RELAY_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, LOW);
 
     dht.begin();
-    delay(2000); // Tunggu sensor DHT siap
     setupFuzzy();
+
+    // **Hubungkan ke Blynk**
+    Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 }
 
 void loop() {
+    Blynk.run();  // Jalankan Blynk
+
     h = dht.readHumidity();
     t = dht.readTemperature();
 
-    // **Cek jika sensor error**
     if (isnan(h) || isnan(t)) {
         lcd.clear();
         lcd.setCursor(0, 0);
@@ -101,45 +112,44 @@ void loop() {
         delay(2000);
         return;
     }
-    
-    // **Masukkan data ke Fuzzy Logic**
+
     fuzzy->setInput(1, t);
     fuzzy->setInput(2, h);
     fuzzy->fuzzify();
     int kondisi = fuzzy->defuzzify(3);
-    
-    // **Tampilkan di LCD**
+
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Suhu: ");
     lcd.print(t);
     lcd.print(" C");
-    
+
     lcd.setCursor(0, 1);
     lcd.print("Status: ");
-    
-    // **Cek kondisi dan kendalikan relay & buzzer**
+
     if (kondisi < 50) {
         lcd.print("Nyaman");
-        digitalWrite(RELAY_PIN, HIGH);   // Matikan relay (kipas OFF)
-        digitalWrite(BUZZER_PIN, LOW);   // Matikan buzzer
+        digitalWrite(RELAY_PIN, HIGH);
+        digitalWrite(BUZZER_PIN, LOW);
+        Blynk.virtualWrite(VIRTUAL_PIN_STATUS, "Nyaman");
     } else {
-        lcd.print("Tdk Nymn");
-        digitalWrite(RELAY_PIN, LOW);    // Nyalakan relay (kipas ON)
-
-        // **Buzzer ON/OFF setiap 1 detik (seperti contoh awal)**
+        lcd.print("TdkNymn");
+        digitalWrite(RELAY_PIN, LOW);
         if (millis() - lastBuzzTime >= 1000) {
             lastBuzzTime = millis();
-            buzzerState = !buzzerState;  // Toggle buzzer
+            buzzerState = !buzzerState;
             digitalWrite(BUZZER_PIN, buzzerState);
         }
+        Blynk.virtualWrite(VIRTUAL_PIN_STATUS, "Tidak Nyaman");
     }
 
-    // **Tampilkan di Serial Monitor**
+    Blynk.virtualWrite(VIRTUAL_PIN_TEMP, t);
+    Blynk.virtualWrite(VIRTUAL_PIN_HUMI, h);
+    Blynk.virtualWrite(V2, kondisi < 50 ? "Nyaman" : "Tidak Nyaman");
     Serial.print("Suhu: "); Serial.print(t);
     Serial.print(" C, Kelembaban: "); Serial.print(h);
     Serial.print(" %, Status: ");
-    Serial.println(kondisi < 50 ? "Nyaman" : "Tidak Nymn");
+    Serial.println(kondisi < 50 ? "Nyaman" : "Tidak Nyaman");
 
-    delay(500); // Delay pendek agar program tetap responsif
+    delay(500);
 }
